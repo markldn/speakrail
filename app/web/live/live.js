@@ -151,6 +151,12 @@ refreshVoiceDepth();
 
 // ---------------------------------------------------------------- blob
 const canvas = $("blob"), ctx = canvas.getContext("2d");
+const orbColors = getComputedStyle(document.documentElement);
+const orbIce = orbColors.getPropertyValue("--orb-ice-rgb").trim();
+const orbCyan = orbColors.getPropertyValue("--orb-cyan-rgb").trim();
+const orbBlue = orbColors.getPropertyValue("--orb-blue-rgb").trim();
+const orbIndigo = orbColors.getPropertyValue("--orb-indigo-rgb").trim();
+const orbDeep = orbColors.getPropertyValue("--orb-deep-rgb").trim();
 const lvl = { mic: 0, micTarget: 0, head: 0, bot: 0, botTarget: 0 };   // 0..1, smoothed in the draw loop
 let botSpeaking = false;
 function resize() {
@@ -189,21 +195,31 @@ function drawBlob(t) {
   const p0 = pts[0], p1 = pts[1]; path.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
   path.closePath();
 
-  // halo: wide soft pink glow (the top bar's #f4b6c9), stronger while the assistant speaks
+  // Blue ambient halo brightens toward cyan with the assistant's playback level.
   const glow = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 2.2);
   const halo = bot > 0.02 ? 0.12 + bot * 0.20 : 0.08 + user * 0.12;
-  glow.addColorStop(0, `rgba(244,182,201,${halo})`); glow.addColorStop(1, "rgba(244,182,201,0)");
+  glow.addColorStop(0, `rgba(${bot > 0.02 ? orbCyan : orbBlue},${halo})`);
+  glow.addColorStop(0.48, `rgba(${orbBlue},${halo * 0.42})`);
+  glow.addColorStop(1, `rgba(${orbBlue},0)`);
   ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
 
-  // body: semi-transparent white, brighter core
+  // Layered cyan-to-indigo body with a cool specular highlight.
   const fill = ctx.createRadialGradient(cx - R * 0.15, cy - R * 0.2, R * 0.1, cx, cy, R * 1.15);
-  fill.addColorStop(0, `rgba(250,250,250,${0.78 + user * 0.15})`);
-  fill.addColorStop(0.7, `rgba(250,250,250,${0.42 + user * 0.15})`);
-  fill.addColorStop(1, "rgba(250,250,250,0.06)");
-  ctx.shadowColor = "rgba(250,250,250,0.35)"; ctx.shadowBlur = 40 + user * 40;
+  fill.addColorStop(0, `rgba(${orbIce},${0.96 + bot * 0.04})`);
+  fill.addColorStop(0.2, `rgba(${orbCyan},${0.96 + bot * 0.04})`);
+  fill.addColorStop(0.56, `rgba(${orbBlue},0.96)`);
+  fill.addColorStop(0.84, `rgba(${orbIndigo},0.94)`);
+  fill.addColorStop(1, `rgba(${orbDeep},0.12)`);
+  ctx.shadowColor = `rgba(${orbBlue},0.52)`; ctx.shadowBlur = 42 + user * 24 + bot * 46;
   ctx.fillStyle = fill; ctx.fill(path);
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = `rgba(250,250,250,${0.18 + user * 0.2})`; ctx.lineWidth = 1; ctx.stroke(path);
+  ctx.strokeStyle = `rgba(${orbIce},${0.32 + user * 0.16 + bot * 0.18})`; ctx.lineWidth = 1; ctx.stroke(path);
+
+  ctx.save(); ctx.clip(path);
+  const shine = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.38, 0, cx - R * 0.3, cy - R * 0.38, R * 0.85);
+  shine.addColorStop(0, `rgba(${orbIce},${0.28 + bot * 0.12})`);
+  shine.addColorStop(1, `rgba(${orbCyan},0)`);
+  ctx.fillStyle = shine; ctx.fill(path); ctx.restore();
 
   // the assistant's voice: a second, thinner membrane pulsing outside the body
   if (bot > 0.02) {
@@ -212,7 +228,7 @@ function drawBlob(t) {
       const a = (i / N) * Math.PI * 2, r = R * (1.12 + bot * 0.22 + 0.04 * Math.sin(9 * a + s * 5));
       i ? ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a)) : ctx.moveTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
     }
-    ctx.strokeStyle = `rgba(250,250,250,${0.12 + bot * 0.25})`; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = `rgba(${orbCyan},${0.28 + bot * 0.38})`; ctx.lineWidth = 1.5; ctx.stroke();
   }
   // output level from the playback analyser (drives `bot`)
   if (analyser && botSpeaking) {

@@ -4,8 +4,10 @@
   --color-bg:#151515; --color-fg:#fafafa; --color-fg-body:#fafafaf2; --color-fg-muted:#fafafab3; --color-fg-subtle:#fafafa80;
   --color-fg-faint:#fafafa59; --color-surface-1:#fafafa08; --color-surface-2:#fafafa0f; --color-surface-3:#fafafa1a;
   --color-border-subtle:#fafafa14; --color-border:#fafafa1a; --color-border-strong:#fafafa29;
-  /* pastel accents around the pink: the assistant = pink, the user / listening = sage */
+  /* interface accents */
   --brand-pink:#f4b6c9; --brand-sage:#a3d9b8; --brand-butter:#ecd59f; --brand-coral:#f0a3a3;
+  --orb-ice-rgb:220,248,255; --orb-cyan-rgb:81,220,255; --orb-blue-rgb:54,133,255;
+  --orb-indigo-rgb:63,79,220; --orb-deep-rgb:30,56,150;
   --font-sans:"Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --radius-sm:10px; --radius-md:14px; --radius-lg:20px; --radius-full:9999px;
   --weight-regular:350; --weight-medium:450; --weight-semibold:500;
