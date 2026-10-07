@@ -51,9 +51,13 @@ def micro_cfg(q, cfg):
     from claude_tool import check_key
     from session import MicroCfg
     key_ok = check_key(q.get("ck"))
+    system_prompt = q.get("system_prompt", "")
+    if len(system_prompt.encode("utf-8")) > 1200:
+        system_prompt = ""
     return MicroCfg(url=ARGS.mt_url, lora=os.environ.get("LLM_LORA", "speakrail"),
                     think_model=os.environ.get("LLM_BASE_MODEL", "speakrail-base"), undo_words=ARGS.undo_words, tool_hold_ms=ARGS.tool_hold_ms,
                     persona=ARGS.persona,
+                    system_prompt=system_prompt,
                     allow_interject=not ARGS.no_interject, silence_fallback_ms=cfg.silence_ms,
                     notes=ARGS.notes, phrase_cache=not ARGS.no_phrase_cache, safety_yield_s=ARGS.safety_yield_s,
                     claude=bool(ARGS.claude and key_ok), claude_model=ARGS.claude_model or None,

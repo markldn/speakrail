@@ -27,6 +27,11 @@
         <select id="microphone"><option value="">System default</option></select></div>
       <div class="row"><label for="speaker">Speaker</label>
         <select id="speaker"><option value="">System default</option></select></div>
+      <div class="system-prompt">
+        <label for="systemPrompt">System prompt</label>
+        <textarea id="systemPrompt" rows="5" maxlength="1200" placeholder="Add instructions for how the assistant should respond…" aria-describedby="systemPromptHint"></textarea>
+        <div id="systemPromptHint" class="device-hint">Added to Speakrail’s built-in prompt. Changes apply next start.</div>
+      </div>
       <div id="voiceFidelity" class="voice-fidelity" hidden>
         <div class="fidelity-title"><label for="voiceDepth">Voice fidelity</label><output id="voiceDepthValue">16</output></div>
         <input id="voiceDepth" type="range" min="10" max="16" step="1" value="16" aria-describedby="voiceDepthHint">

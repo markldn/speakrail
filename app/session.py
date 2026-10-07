@@ -130,6 +130,7 @@ class MicroCfg:
     search: bool = True              # declare web_search (SearXNG answers it)
     tools: bool = True               # declare the local tools (tools.LOCAL_TOOLS)
     persona: str = "nova"
+    system_prompt: str = ""          # optional extra instructions entered in the live UI
     claude: bool = False             # declare claude_code (+ task_status / cancel_task): tasks for Claude Code on this
                                      # machine, reported as async results (server.py turns it on only with the access key)
     claude_model: str | None = None  # claude -p --model (None: the CLI default)
@@ -292,6 +293,8 @@ class MicroSession(Session):
     def _system_text(self):
         rules = " The user's standing instructions: " + self.user_rules.rstrip(".") + "." if self.user_rules else ""
         s = PERSONAS[self.m.persona].format(city=DEFAULT_CITY) + self._extra_facts(3)
+        if self.m.system_prompt.strip():
+            s += "\nAdditional system instructions from Settings:\n" + self.m.system_prompt.strip()
         return s + rules + "\n" + P.date_line(datetime.datetime.now(), DEFAULT_TZ)
 
     # ------------------------------------------------------------------ lifecycle

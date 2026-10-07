@@ -3,7 +3,7 @@
  * dropdown and are sent as query params on connect (they only apply on the next start). */
 const $ = (id) => document.getElementById(id);
 const CAPTURE_HZ = 16000;
-const SETTINGS = ["barge", "search", "showlog", "pregenerate"];
+const SETTINGS = ["barge", "search", "showlog", "pregenerate", "systemPrompt"];
 const AUDIO_SETTINGS = ["microphone", "speaker"];
 let voiceDepthCurrent = null;
 
@@ -22,6 +22,20 @@ for (const id of SETTINGS) {
   if (saved != null) { if (el.type === "checkbox") el.checked = saved === "1"; else el.value = saved; }
   el.onchange = () => { localStorage.setItem("speakrail." + id, el.type === "checkbox" ? (el.checked ? "1" : "0") : el.value); if (id === "showlog") $("log").hidden = !el.checked; };
 }
+const SYSTEM_PROMPT_MAX_BYTES = 1200;
+function updateSystemPromptHint() {
+  const bytes = new TextEncoder().encode($("systemPrompt").value).length;
+  const hint = $("systemPromptHint");
+  hint.textContent = bytes > SYSTEM_PROMPT_MAX_BYTES
+    ? `Prompt is ${bytes} bytes; shorten it to ${SYSTEM_PROMPT_MAX_BYTES} bytes or less.`
+    : `Added to Speakrail’s built-in prompt. Changes apply next start. ${bytes}/${SYSTEM_PROMPT_MAX_BYTES} bytes.`;
+  hint.dataset.invalid = bytes > SYSTEM_PROMPT_MAX_BYTES ? "true" : "false";
+}
+$("systemPrompt").oninput = () => {
+  localStorage.setItem("speakrail.systemPrompt", $("systemPrompt").value);
+  updateSystemPromptHint();
+};
+updateSystemPromptHint();
 $("log").hidden = !$("showlog").checked;
 function lockSettings(lock) {
   for (const id of SETTINGS) if (id !== "showlog") $(id).disabled = lock;
@@ -341,6 +355,11 @@ function onMessage(ev) {
 const WORKLET = `class Cap extends AudioWorkletProcessor { process(inputs) { const ch = inputs[0][0]; if (ch) this.port.postMessage(new Float32Array(ch)); return true; } } registerProcessor('cap', Cap);`;
 
 async function start() {
+  if (new TextEncoder().encode($("systemPrompt").value).length > SYSTEM_PROMPT_MAX_BYTES) {
+    updateSystemPromptHint();
+    $("systemPrompt").focus();
+    return;
+  }
   $("go").disabled = true;
   let micId = $("microphone").value;
   if (micId && ![...$("microphone").options].some((o) => o.value === micId && o.value)) {
@@ -370,7 +389,8 @@ async function start() {
   micCtx = new AudioContext({ sampleRate: CAPTURE_HZ });
   await micCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" })));
 
-  const qs = `?barge=${$("barge").value}&search=${$("search").value}&pregenerate=${$("pregenerate").checked ? "1" : "0"}`;
+  const prompt = encodeURIComponent($("systemPrompt").value);
+  const qs = `?barge=${$("barge").value}&search=${$("search").value}&pregenerate=${$("pregenerate").checked ? "1" : "0"}&system_prompt=${prompt}`;
   const ck = new URLSearchParams(location.search).get("ck");     // the claude_code access key, if the page has one
   const wsUrl = new URL("ws" + qs + (ck ? "&ck=" + encodeURIComponent(ck) : ""), location.href); wsUrl.protocol = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(wsUrl); ws.binaryType = "arraybuffer";
