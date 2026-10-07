@@ -189,7 +189,8 @@ function drawBlob(t) {
   const user = Math.min(1, lvl.mic * 1.6 + lvl.head * 0.4);       // the mic level, lifted by the turn head's P(speaking)
   const bot = Math.min(1, lvl.bot * 1.8);
   const base = Math.min(w, h) * 0.19;
-  const breathe = 1 + 0.008 * Math.sin(t * 0.0007);
+  const pulse = 0.5 + 0.5 * Math.sin(t * 0.0012);
+  const breathe = 1 + 0.014 * Math.sin(t * 0.0012) + 0.004 * Math.sin(t * 0.00055 + 1.4);
   const R = base * breathe * (1 + user * 0.018 + bot * 0.025);
   const s = t * 0.001;
   const N = 180;
@@ -199,7 +200,7 @@ function drawBlob(t) {
 
   // Quiet blue aura; it swells with playback rather than washing out the dark page.
   const glow = ctx.createRadialGradient(cx, cy, R * 0.82, cx, cy, R * 1.55);
-  const halo = 0.025 + bot * 0.085 + user * 0.025;
+  const halo = 0.018 + pulse * 0.012 + bot * 0.085 + user * 0.025;
   glow.addColorStop(0, `rgba(${orbBlue},${halo})`);
   glow.addColorStop(1, `rgba(${orbBlue},0)`);
   ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
@@ -216,20 +217,22 @@ function drawBlob(t) {
 
   // A diffuse, uneven cloud sweep across the lower middle, rather than a hard stripe.
   ctx.save(); ctx.clip(path);
-  const drift = Math.sin(t * 0.00012) * R * 0.035;
-  ctx.translate(cx + drift, cy + R * 0.12 + drift * 0.5);
-  ctx.rotate(-0.36);
+  const driftX = Math.sin(t * 0.00034) * R * 0.075;
+  const driftY = Math.cos(t * 0.00025) * R * 0.045;
+  ctx.translate(cx + driftX, cy + R * 0.12 + driftY);
+  ctx.rotate(-0.36 + Math.sin(t * 0.00019) * 0.022);
   ctx.scale(1, 0.32);
   const cloud = ctx.createRadialGradient(0, 0, R * 0.12, 0, 0, R * 1.65);
-  cloud.addColorStop(0, `rgba(${orbIce},${0.42 + bot * 0.08})`);
-  cloud.addColorStop(0.34, `rgba(${orbIce},${0.32 + bot * 0.08})`);
+  cloud.addColorStop(0, `rgba(${orbIce},${0.37 + pulse * 0.08 + bot * 0.08})`);
+  cloud.addColorStop(0.34, `rgba(${orbIce},${0.28 + pulse * 0.07 + bot * 0.08})`);
   cloud.addColorStop(0.68, `rgba(${orbIce},0.12)`);
   cloud.addColorStop(1, `rgba(${orbIce},0)`);
   ctx.fillStyle = cloud; ctx.fillRect(-R * 1.8, -R * 3, R * 3.6, R * 6);
   ctx.restore();
 
   ctx.save(); ctx.clip(path);
-  const flareX = cx + R * 0.58, flareY = cy - R * 0.34;
+  const flareX = cx + R * (0.58 + Math.sin(t * 0.00027) * 0.075);
+  const flareY = cy + R * (-0.34 + Math.cos(t * 0.00021) * 0.055);
   const flare = ctx.createRadialGradient(flareX, flareY, 0, flareX, flareY, R * 0.82);
   flare.addColorStop(0, `rgba(${orbIce},${0.54 + bot * 0.12})`);
   flare.addColorStop(0.24, `rgba(${orbIce},${0.28 + bot * 0.10})`);
@@ -240,8 +243,8 @@ function drawBlob(t) {
   for (const [x, y, size, alpha, phase] of [
     [-0.48, 0.28, 0.48, 0.19, 0.3], [0.12, 0.10, 0.56, 0.13, 1.7], [0.60, -0.30, 0.42, 0.22, 2.8],
   ]) {
-    const px = cx + R * (x + Math.sin(t * 0.00016 + phase) * 0.025);
-    const py = cy + R * (y + Math.cos(t * 0.00013 + phase) * 0.018);
+    const px = cx + R * (x + Math.sin(t * 0.00029 + phase) * 0.055);
+    const py = cy + R * (y + Math.cos(t * 0.00023 + phase) * 0.04);
     const mist = ctx.createRadialGradient(px, py, 0, px, py, R * size);
     mist.addColorStop(0, `rgba(${orbIce},${alpha + bot * 0.06})`);
     mist.addColorStop(0.5, `rgba(${orbIce},${alpha * 0.38})`);
