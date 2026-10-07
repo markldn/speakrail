@@ -4,6 +4,7 @@
 const $ = (id) => document.getElementById(id);
 const CAPTURE_HZ = 16000;
 const SETTINGS = ["barge", "search", "showlog"];
+const AUDIO_SETTINGS = ["microphone", "speaker"];
 
 let ws, micCtx, playCtx, worklet, stream, analyser, anaBuf, outGain;
 let sources = [], playCursor = 0, uttStart = 0, uttId = 0;
@@ -22,6 +23,69 @@ for (const id of SETTINGS) {
 }
 $("log").hidden = !$("showlog").checked;
 function lockSettings(lock) { for (const id of SETTINGS) if (id !== "showlog") $(id).disabled = lock; }
+for (const id of AUDIO_SETTINGS) {
+  const saved = localStorage.getItem("speakrail." + id);
+  if (saved != null) $(id).value = saved;
+  $(id).onchange = () => localStorage.setItem("speakrail." + id, $(id).value);
+}
+function lockAudioSettings(lock) {
+  for (const id of AUDIO_SETTINGS) $(id).disabled = lock;
+  $("refreshDevices").disabled = lock;
+  $("chooseSpeaker").disabled = lock;
+}
+async function refreshAudioDevices() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    for (const [id, kind, label] of [["microphone", "audioinput", "Microphone"], ["speaker", "audiooutput", "Speaker"]]) {
+      const select = $(id), selected = localStorage.getItem("speakrail." + id) || "";
+      const matching = devices.filter((d) => d.kind === kind);
+      select.replaceChildren(new Option("System default", ""));
+      matching.forEach((d, i) => select.add(new Option(d.label || `${label} ${i + 1}`, d.deviceId)));
+      if (selected && matching.some((d) => d.deviceId === selected)) select.value = selected;
+      else if (selected) {
+        select.add(new Option("Saved device unavailable", selected));
+        select.value = selected;
+      } else select.value = "";
+    }
+    const named = devices.some((d) => d.label);
+    const inputs = devices.filter((d) => d.kind === "audioinput").length;
+    const outputs = devices.filter((d) => d.kind === "audiooutput").length;
+    $("deviceHint").textContent = named
+      ? `${inputs} mic${inputs === 1 ? "" : "s"}, ${outputs} speaker${outputs === 1 ? "" : "s"} found. Changes apply next start.`
+      : "Click Find devices to grant access and list your mic and speakers.";
+  } catch (_) { /* Device enumeration is optional; browser defaults still work. */ }
+}
+$("refreshDevices").onclick = async () => {
+  const button = $("refreshDevices"); button.disabled = true;
+  try {
+    const temporaryStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    temporaryStream.getTracks().forEach((track) => track.stop());
+    await refreshAudioDevices();
+  } catch (e) {
+    $("deviceHint").textContent = "Could not access devices: " + e.message;
+  } finally { button.disabled = running; }
+};
+$("chooseSpeaker").onclick = async () => {
+  const button = $("chooseSpeaker"); button.disabled = true;
+  try {
+    if (!navigator.mediaDevices?.selectAudioOutput) {
+      throw new Error("This browser has no speaker picker. Connect the headset to the device running your browser, then use Find devices.");
+    }
+    const device = await navigator.mediaDevices.selectAudioOutput();
+    await refreshAudioDevices();
+    const select = $("speaker");
+    let option = [...select.options].find((o) => o.value === device.deviceId);
+    if (!option) { option = new Option(device.label || "Selected speaker", device.deviceId); select.add(option); }
+    select.value = device.deviceId;
+    localStorage.setItem("speakrail.speaker", device.deviceId);
+    $("deviceHint").textContent = `${device.label || "Speaker selected"}. It will be used next start.`;
+  } catch (e) {
+    if (e.name !== "NotAllowedError") $("deviceHint").textContent = e.message;
+  } finally { button.disabled = running; }
+};
+refreshAudioDevices();
+navigator.mediaDevices?.addEventListener?.("devicechange", refreshAudioDevices);
 
 // ---------------------------------------------------------------- blob
 const canvas = $("blob"), ctx = canvas.getContext("2d");
@@ -200,10 +264,28 @@ const WORKLET = `class Cap extends AudioWorkletProcessor { process(inputs) { con
 
 async function start() {
   $("go").disabled = true;
+  let micId = $("microphone").value;
+  if (micId && ![...$("microphone").options].some((o) => o.value === micId && o.value)) {
+    micId = ""; localStorage.removeItem("speakrail.microphone"); $("microphone").value = "";
+  }
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: CAPTURE_HZ } });
+    const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: CAPTURE_HZ };
+    if (micId) audio.deviceId = { exact: micId };
+    stream = await navigator.mediaDevices.getUserMedia({ audio });
   } catch (e) { setState("error"); showBot("Microphone denied: " + e.message, true); $("go").disabled = false; return; }
+  await refreshAudioDevices();
   playCtx = new AudioContext({ sampleRate: 24000 }); await playCtx.resume();
+  const speakerId = $("speaker").value;
+  if (speakerId) {
+    try {
+      if (typeof playCtx.setSinkId !== "function") throw new Error("Speaker selection is not supported by this browser");
+      await playCtx.setSinkId(speakerId);
+    } catch (e) {
+      showBot("Could not select speaker: " + e.message, true);
+      playCtx.close(); stream.getTracks().forEach((t) => t.stop()); stream = null;
+      $("go").disabled = false; setState("error"); return;
+    }
+  }
   analyser = playCtx.createAnalyser(); analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.5; anaBuf = new Float32Array(analyser.fftSize);
   analyser.connect(playCtx.destination);
   outGain = playCtx.createGain(); outGain.connect(analyser);      // ducking: lower our volume while the user talks over a reply
@@ -229,7 +311,7 @@ async function start() {
   };
   micCtx.createMediaStreamSource(stream).connect(worklet);
   worklet.connect(micCtx.destination);
-  running = true; lockSettings(true);
+  running = true; lockSettings(true); lockAudioSettings(true);
   $("go").hidden = true; $("controls").hidden = false;
   setState("listening");
 }
@@ -239,9 +321,11 @@ function stop(fromClose) {
   if (ws && !fromClose && ws.readyState === 1) ws.send(JSON.stringify({ cmd: "stop" }));
   stopPlayback(); botSpeaking = false;
   if (stream) stream.getTracks().forEach((t) => t.stop());
+  if (playCtx) playCtx.close();
+  stream = null; playCtx = null;
   if (micCtx) micCtx.close();
   lvl.micTarget = 0; lvl.head = 0;
-  $("controls").hidden = true; $("go").hidden = false; $("go").disabled = false; lockSettings(false);
+  $("controls").hidden = true; $("go").hidden = false; $("go").disabled = false; lockSettings(false); lockAudioSettings(false);
   setState("idle");
 }
 

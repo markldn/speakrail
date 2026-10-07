@@ -1,0 +1,144 @@
+# AMD ROCm deployment. Run with:
+#   docker compose -f compose.amd.yaml up -d --build
+# Models default to ./models; set SPEAKRAIL_MODELS_DIR to store them elsewhere.
+
+name: speakrail-amd
+
+x-rocm: &rocm
+  devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+  group_add: ["video", "render"]
+
+x-models-ro: &models-ro
+  - ${SPEAKRAIL_MODELS_DIR:-./models}:/models:ro
+
+services:
+  asr:
+    image: speakrail-asr-rocm:local
+    build:
+      context: services/asr
+      dockerfile: Dockerfile.rocm
+      args:
+        BASE_IMAGE: ${SPEAKRAIL_ROCM_BASE:-capicua25x/vllm-rocm-rdna4:0.26.1-rdna4-rc7}
+    volumes:
+      - ${SPEAKRAIL_MODELS_DIR:-./models}:/models:ro
+    environment:
+      # Keep ASR with TTS on the larger R9700; move vLLM to the RX 9070 so
+      # autoregressive TTS chunks do not time-slice against LLM decode.
+      HIP_VISIBLE_DEVICES: "0"
+      MODELS_DIR: /models
+      ASR_HOST: 0.0.0.0
+      ASR_PORT: 8765
+      ASR_BACKEND: hip
+      ASR_DEVICE: 0
+      ACPP_PORT: 18090
+      OMP_NUM_THREADS: 4
+      OMP_WAIT_POLICY: PASSIVE
+    <<: *rocm
+    restart: unless-stopped
+
+  tts:
+    image: speakrail-tts-rocm:local
+    build:
+      context: services/tts
+      dockerfile: Dockerfile.rocm
+      args:
+        BASE_IMAGE: ${SPEAKRAIL_ROCM_BASE:-capicua25x/vllm-rocm-rdna4:0.26.1-rdna4-rc7}
+    volumes: *models-ro
+    environment:
+      HIP_VISIBLE_DEVICES: "0"
+      # BF16 tested faster than int8 for both depth and decode-shaped backbone
+      # work on this gfx1201 GPU; keep int8 only on the text encoder.
+      BREEZE_INT8: ${BREEZE_INT8:-text_encoder}
+      # Capture the upstream backbone decode graph at startup. This paired with
+      # eager-op depth HIP graph capture was the fastest measured configuration.
+      BREEZE_FAST_FLAGS: ${BREEZE_FAST_FLAGS:-backbone_decode}
+      # Eager-op HIP graph capture avoids the slow TorchInductor path for depth.
+      BREEZE_EAGER_DEPTH_GRAPH: ${BREEZE_EAGER_DEPTH_GRAPH:-1}
+      # Keep full fidelity as the persistent default; 12 is an A/B performance preset.
+      BREEZE_DEPTH_LEVELS: ${BREEZE_DEPTH_LEVELS:-16}
+      MIOPEN_FIND_MODE: FAST
+      MIOPEN_FIND_ENFORCE: NONE
+    <<: *rocm
+    restart: unless-stopped
+
+  llm:
+    image: speakrail-vllm-rocm:local
+    build:
+      context: services/llm
+      dockerfile: Dockerfile.rocm
+      args:
+        BASE_IMAGE: ${SPEAKRAIL_ROCM_BASE:-capicua25x/vllm-rocm-rdna4:0.26.1-rdna4-rc7}
+    entrypoint: ["vllm", "serve"]
+    command:
+      - /models/speakrail-gemma/model
+      - --served-model-name=speakrail-base
+      - --host=0.0.0.0
+      - --port=8000
+      - --enable-lora
+      - --max-lora-rank=32
+      - --max-loras=1
+      - --lora-modules=speakrail=/models/speakrail-gemma/adapter
+      - --max-model-len=${LLM_MAX_MODEL_LEN:-16384}
+      - --max-num-seqs=3
+      - --gpu-memory-utilization=${LLM_GPU_MEMORY_UTILIZATION:-0.90}
+      - --enable-prefix-caching
+      - --generation-config=vllm
+      - '--limit-mm-per-prompt={"image":0,"audio":0}'
+    volumes: *models-ro
+    environment:
+      HIP_VISIBLE_DEVICES: "1"
+      VLLM_USE_FLASHINFER_SAMPLER: "0"
+      HF_HUB_OFFLINE: "1"
+    <<: *rocm
+    ipc: host
+    depends_on:
+      tts:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 600s
+    restart: unless-stopped
+
+  app:
+    image: speakrail-app:amd
+    build: app
+    command: ["--no-phrase-cache"]
+    ports:
+      # Tailscale Serve terminates HTTPS on :8603 and proxies to localhost:8604.
+      - ${UI_HOST:-127.0.0.1}:${UI_PORT:-8604}:8080
+    volumes:
+      - ${SPEAKRAIL_MODELS_DIR:-./models}:/models:ro
+      - app-data:/data
+    environment:
+      ASR_URL: ws://asr:8765/v1/transcribe
+      LLM_URL: http://llm:8000/v1/completions
+      TTS_URL: http://tts:7860/v1/audio/speech
+      SEARXNG_URL: http://searxng:8080/search
+      VOICE: ${VOICE:-female_a.wav}
+      PERSONA: ${PERSONA:-nova}
+      HOME_CITY: ${HOME_CITY:-Paris}
+      HOME_TIMEZONE: ${HOME_TIMEZONE:-Europe/Paris}
+      SILENCE_MS: ${SILENCE_MS:-1000}
+      NOTES: ${NOTES:-1}
+      INTERJECT: ${INTERJECT:-1}
+      TOOL_HOLD_MS: ${TOOL_HOLD_MS:-300}
+      SEARCH: ${SEARCH:-off}
+      SERPER_API_KEY: ${SERPER_API_KEY:-}
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
+      SESSIONS_DIR: ${SESSIONS_DIR:-/data/sessions}
+    depends_on:
+      asr:
+        condition: service_healthy
+      llm:
+        condition: service_healthy
+      tts:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  app-data:

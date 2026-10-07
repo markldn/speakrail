@@ -1,0 +1,24 @@
+diff --git a/models/fast_streaming.py b/models/fast_streaming.py
+--- a/models/fast_streaming.py
++++ b/models/fast_streaming.py
+@@ -3,4 +3,5 @@
+ import json
++import os
+ import time
+ import uuid
+ from collections.abc import Callable, Iterator
+@@ -285,5 +286,13 @@
+             if self._fast_depth_decoder:
+                 self._depth_decoder_graph.capture()
+             else:
+                 self._depth_decoder_graph.prepare_eager()
++                if os.environ.get("BREEZE_EAGER_DEPTH_GRAPH", "0").lower() in (
++                    "1", "true", "yes", "on"
++                ):
++                    # Capture eager operations directly. The upstream fast path
++                    # compiles each depth layer first, which is extremely slow
++                    # on this ROCm build; eager ops are graph-capturable.
++                    self._depth_decoder_graph.no_graph = False
++                    self._depth_decoder_graph.capture(num_warmup=3)
+         else:
+             self._depth_decoder_graph.set_guidance_scale(guidance_scale)

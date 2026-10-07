@@ -1,0 +1,40 @@
+ARG BASE_IMAGE=capicua25x/vllm-rocm-rdna4:0.26.1-rdna4-rc7
+FROM ${BASE_IMAGE} AS build
+
+ARG AUDIOCPP_REPO=https://github.com/speakrail/audio.cpp.git
+ARG AUDIOCPP_COMMIT=ba2ae40d4630874121d2dfadddd10fe97c358b89
+ARG BUILD_JOBS=16
+
+RUN apt-get update && apt-get install -y --no-install-recommends git build-essential && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN git clone "$AUDIOCPP_REPO" audio.cpp && cd audio.cpp && git checkout "$AUDIOCPP_COMMIT"
+RUN cmake -S /src/audio.cpp -B /src/audio.cpp/build-hip \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=voxtral_realtime \
+      -DENGINE_ENABLE_CPU_ALL_VARIANTS=OFF \
+      -DENGINE_ENABLE_CUDA=OFF -DENGINE_ENABLE_HIP=ON -DENGINE_ENABLE_VULKAN=OFF \
+      -DENGINE_BUILD_EXAMPLES=OFF -DENGINE_BUILD_TESTS=OFF -DENGINE_BUILD_WARMBENCH=OFF \
+      -DGPU_TARGETS=gfx1201 \
+      -DCMAKE_HIP_ARCHITECTURES=gfx1201 \
+      -DCMAKE_CXX_COMPILER=/opt/rocm/llvm/bin/clang++ \
+      -DCMAKE_HIP_COMPILER=/opt/rocm/llvm/bin/clang++ \
+      -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined && \
+    cmake --build /src/audio.cpp/build-hip --parallel "$BUILD_JOBS" --target audiocpp_server
+
+FROM ${BASE_IMAGE}
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
+    LD_LIBRARY_PATH=/opt/audiocpp/bin:/opt/rocm/lib/llvm/lib:/opt/rocm/lib
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build /src/audio.cpp/build-hip/bin/ /opt/audiocpp/bin/
+COPY --from=build /src/audio.cpp/model_specs/ /opt/audiocpp/model_specs/
+COPY requirements.txt bridge.py start.sh /app/
+RUN python -m pip install --no-cache-dir -r /app/requirements.txt && chmod +x /app/start.sh && \
+    ldd /opt/audiocpp/bin/audiocpp_server | tee /tmp/ldd.txt && ! grep -q 'not found' /tmp/ldd.txt
+ENV MODELS_DIR=/models AUDIOCPP_BIN=/opt/audiocpp/bin/audiocpp_server \
+    ASR_HOST=0.0.0.0 ASR_PORT=8765 ASR_BACKEND=hip ASR_DEVICE=0 ACPP_PORT=18090
+EXPOSE 8765
+HEALTHCHECK --interval=10s --timeout=3s --start-period=300s CMD python -c "import socket; s=socket.create_connection(('127.0.0.1',8765),2); s.close()"
+ENTRYPOINT ["/app/start.sh"]

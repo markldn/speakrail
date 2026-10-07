@@ -1,0 +1,119 @@
+diff --git a/models/fast_streaming.py b/models/fast_streaming.py
+index a7f1c73..21b3cf8 100644
+--- a/models/fast_streaming.py
++++ b/models/fast_streaming.py
+@@ -198,6 +198,11 @@ class FastBreezeStreamingRuntime:
+         self._reserved_codec_token_ids = tuple(
+             range(self._codec_codebook_size, int(self.model.config.vocab_size))
+         )
++        self._active_codebooks = int(
++            os.environ.get("BREEZE_DEPTH_LEVELS", self.model.config.num_codebooks)
++        )
++        if not 2 <= self._active_codebooks <= int(self.model.config.num_codebooks):
++            raise ValueError("BREEZE_DEPTH_LEVELS must be between 2 and model num_codebooks")
+ 
+         if self.device.type != "cuda":
+             raise RuntimeError("fast streaming requires a CUDA device")
+@@ -274,7 +280,7 @@ class FastBreezeStreamingRuntime:
+                 device=str(self.device),
+                 dtype=self.dtype,
+                 guidance_scale=guidance_scale,
+-                num_codebooks=self.model.config.num_codebooks,
++                num_codebooks=self._active_codebooks,
+                 codec_codebook_size=self._codec_codebook_size,
+                 fast=self._fast_depth_decoder,
+                 batch_size=depth_bucket_sizes[0],
+@@ -308,6 +314,7 @@ class FastBreezeStreamingRuntime:
+             fast=self._fast_codec,
+             device=self.device,
+             dtype=codec_dtype,
++            active_quantizers=self._active_codebooks,
+         )
+         self._codec_runtime = MultiRequestStreamRuntime(
+             self.audio_tokenizer, runtime_config
+@@ -867,6 +874,8 @@ class FastBreezeStreamingRuntime:
+                     **depth_params,
+                 )
+                 frame = torch.cat([token.view(1), depth_tokens[0]], dim=0)
++                if frame.shape[0] < int(self.model.config.num_codebooks):
++                    frame = torch.cat((frame, frame.new_zeros(int(self.model.config.num_codebooks) - frame.shape[0])))
+                 if token_observer is not None:
+                     token_observer(frame)
+                 if should_decode_codec_frame(frame, self.model.config):
+diff --git a/models/stream_runtime/stream/lane.py b/models/stream_runtime/stream/lane.py
+index 0a1e2ac..c64e212 100644
+--- a/models/stream_runtime/stream/lane.py
++++ b/models/stream_runtime/stream/lane.py
+@@ -234,6 +234,7 @@ class _LaneCore(nn.Module):
+         decoder: Qwen3TTSTokenizerV2Decoder,
+         chunk_frames: int,
+         binding: LaneBinding,
++        active_quantizers: int | None = None,
+     ):
+         super().__init__()
+         self.__dict__["decoder_ref"] = decoder
+@@ -280,12 +281,15 @@ class _LaneCore(nn.Module):
+         )
+         self.pre_transformer = decoder.pre_transformer
+         self.quantizer = decoder.quantizer
++        self.active_quantizers = int(active_quantizers or decoder.config.num_quantizers)
++        if not 1 <= self.active_quantizers <= int(decoder.config.num_quantizers):
++            raise ValueError("active_quantizers exceeds the codec decoder configuration")
+ 
+     def forward(
+         self, codes: torch.Tensor, cache_position: torch.Tensor
+     ) -> torch.Tensor:
+         binding = self.binding
+-        hidden = self.quantizer.decode(codes)
++        hidden = self.quantizer.decode(codes[:, : self.active_quantizers])
+         hidden = (
+             self.pre_conv(
+                 hidden, binding.request_slot.conv1d, binding.workspace_slot.conv1d
+@@ -334,6 +338,7 @@ class ExecutionLane:
+         hot_state: RequestStateSlot,
+         workspace: WorkspaceSlot,
+         fast: bool = False,
++        active_quantizers: int | None = None,
+     ):
+         if tokenizer.model is None:
+             raise ValueError("Tokenizer model is not loaded.")
+@@ -341,7 +346,10 @@ class ExecutionLane:
+         self.lane_id = int(lane_id)
+         self.binding = LaneBinding(request_slot=hot_state, workspace_slot=workspace)
+         self.core = _LaneCore(
+-            tokenizer.model.decoder, chunk_frames=chunk_frames, binding=self.binding
++            tokenizer.model.decoder,
++            chunk_frames=chunk_frames,
++            binding=self.binding,
++            active_quantizers=active_quantizers,
+         )
+         num_quantizers = int(tokenizer.model.decoder.config.num_quantizers)
+         state_device = next(iter(hot_state.conv1d.values())).cache_buf.device
+diff --git a/models/stream_runtime/stream/runtime.py b/models/stream_runtime/stream/runtime.py
+index eb5a61d..c982b90 100644
+--- a/models/stream_runtime/stream/runtime.py
++++ b/models/stream_runtime/stream/runtime.py
+@@ -45,6 +45,7 @@ class QwenStreamRuntimeConfig:
+     tombstone_capacity: int = 1024
+     device: torch.device | None = None
+     dtype: torch.dtype = torch.float32
++    active_quantizers: int | None = None
+ 
+ 
+ @dataclass
+@@ -335,6 +336,7 @@ class MultiRequestStreamRuntime:
+                     hot_state=hot_state,
+                     workspace=workspace_slot,
+                     fast=self.config.fast,
++                    active_quantizers=self.config.active_quantizers,
+                 )
+             )
+             if (
+@@ -363,6 +365,7 @@ class MultiRequestStreamRuntime:
+                         hot_state=eager_tail_hot_state,
+                         workspace=eager_tail_workspace,
+                         fast=False,
++                        active_quantizers=self.config.active_quantizers,
+                     )
+                 )
+         self.samples_per_code = self._validate_and_get_samples_per_code()

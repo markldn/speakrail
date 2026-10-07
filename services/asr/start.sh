@@ -17,21 +17,29 @@ ASR_TURN_HEAD=${ASR_TURN_HEAD:-$MODELS_DIR/turn_head/turn_head.vxth}
 AUDIOCPP_BIN=${AUDIOCPP_BIN:-/app/audiocpp_server}
 ASR_HOST=${ASR_HOST:-127.0.0.1}
 ASR_PORT=${ASR_PORT:-8765}
+ASR_BACKEND=${ASR_BACKEND:-cuda}
+ASR_DEVICE=${ASR_DEVICE:-0}
 ACPP_PORT=${ACPP_PORT:-8090}
 HERE=$(cd "$(dirname "$0")" && pwd)
 CONFIG=${ASR_CONFIG:-/tmp/speakrail_audiocpp.json}
+
+case "$ASR_BACKEND" in
+  cuda|hip|rocm|cpu) ;;
+  *) echo "asr: unsupported ASR_BACKEND=$ASR_BACKEND (use cuda, hip, rocm, or cpu)" >&2; exit 2 ;;
+esac
+[[ "$ASR_DEVICE" =~ ^[0-9]+$ ]] || { echo "asr: ASR_DEVICE must be a non-negative integer" >&2; exit 2; }
 
 cat > "$CONFIG" <<EOF
 {
   "host": "127.0.0.1",
   "port": $ACPP_PORT,
-  "backend": "cuda",
-  "device": 0,
+  "backend": "$ASR_BACKEND",
+  "device": $ASR_DEVICE,
   "threads": 4,
   "lazy_load": false,
   "busy_timeout_ms": 0,
   "live_ingest": {
-    "idle_timeout_ms": 120000,
+    "idle_timeout_ms": 86400000,
     "total_timeout_ms": 14400000,
     "max_body_bytes": 4294967296,
     "max_chunk_bytes": 8388608,

@@ -1160,7 +1160,7 @@ class MicroSession(Session):
             return {"results": [], "note": "no results" if (tr.search_n or 0) >= 0 else "search failed"}
         return {"results": [{"title": x["title"], "snippet": x["snippet"]} for x in tr.search_results]}
 
-    # ------------------------------------------------------------------ background tasks: claude_code, ask_frontier 
+    # ------------------------------------------------------------------ background tasks: claude_code, ask_frontier
     def _registry(self, task_id):
         tid = str(task_id or "")
         return self.claude if tid.startswith("c") else self.frontier if tid.startswith("f") else None
@@ -1243,7 +1243,7 @@ class MicroSession(Session):
         self.result_unreported = True                          # the nudge watches it; cleared when it fires
         return n
 
-    # ------------------------------------------------------------------ reset_chat 
+    # ------------------------------------------------------------------ reset_chat
     async def _reset_tool(self, R: Reply, args: dict):
         """reset_chat, always confirmed by the harness: it resets only on a call with confirmed=true whose user turn says yes,
         after we asked (an earlier reset_chat call, or our previous reply asked about a reset). Anything else: nothing is

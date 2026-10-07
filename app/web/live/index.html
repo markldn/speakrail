@@ -23,6 +23,15 @@
         <select id="barge"><option value="off">off</option><option value="duck" selected>duck (model decides)</option><option value="word">on word</option><option value="head">on speaking class</option></select></div>
       <div class="row"><label for="search">Web search</label>
         <select id="search"><option value="searxng" selected>on (SearXNG)</option><option value="off">off</option></select></div>
+      <div class="row"><label for="microphone">Microphone</label>
+        <select id="microphone"><option value="">System default</option></select></div>
+      <div class="row"><label for="speaker">Speaker</label>
+        <select id="speaker"><option value="">System default</option></select></div>
+      <div id="deviceHint" class="device-hint">Allow microphone access to show device names.</div>
+      <div class="device-actions">
+        <button id="chooseSpeaker" class="chip" type="button">Choose speaker…</button>
+        <button id="refreshDevices" class="chip" type="button">Find devices</button>
+      </div>
       <div class="row check"><label><input type="checkbox" id="showlog"> show turn timings</label></div>
       <div class="hint">Settings apply on the next start. Space = interrupt.</div>
     </div>

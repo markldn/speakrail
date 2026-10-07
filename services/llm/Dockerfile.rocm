@@ -1,0 +1,11 @@
+# Add Gemma 4 Unified's current Transformers implementation to the tested
+# ROCm vLLM image while retaining its ROCm/PyTorch/vLLM stack.
+ARG BASE_IMAGE=capicua25x/vllm-rocm-rdna4:0.26.1-rdna4-rc7
+FROM ${BASE_IMAGE}
+
+ARG TRANSFORMERS_COMMIT=14e738b5d0cc69aa27a95dde272aea41fde44f2f
+RUN python -m pip install --no-deps --no-cache-dir \
+    "huggingface-hub==1.33.0" \
+    "tokenizers==0.23.1" \
+    "git+https://github.com/huggingface/transformers.git@${TRANSFORMERS_COMMIT}" && \
+    python -c "from transformers.models.gemma4_unified import Gemma4UnifiedConfig; print(Gemma4UnifiedConfig.model_type)"
