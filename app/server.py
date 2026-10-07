@@ -58,7 +58,7 @@ def micro_cfg(q, cfg):
                     notes=ARGS.notes, phrase_cache=not ARGS.no_phrase_cache, safety_yield_s=ARGS.safety_yield_s,
                     claude=bool(ARGS.claude and key_ok), claude_model=ARGS.claude_model or None,
                     claude_mode=ARGS.claude_mode, claude_cwd=os.path.expanduser(ARGS.claude_cwd),
-                    frontier=ARGS.frontier)               # paid, on the user's own Fireworks key; no shell access
+                    frontier=ARGS.frontier, pregenerate=q.get("pregenerate") == "1")
 
 
 async def ws_handler(request):

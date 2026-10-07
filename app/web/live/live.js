@@ -3,7 +3,7 @@
  * dropdown and are sent as query params on connect (they only apply on the next start). */
 const $ = (id) => document.getElementById(id);
 const CAPTURE_HZ = 16000;
-const SETTINGS = ["barge", "search", "showlog"];
+const SETTINGS = ["barge", "search", "showlog", "pregenerate"];
 const AUDIO_SETTINGS = ["microphone", "speaker"];
 let voiceDepthCurrent = null;
 
@@ -354,7 +354,7 @@ async function start() {
   micCtx = new AudioContext({ sampleRate: CAPTURE_HZ });
   await micCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" })));
 
-  const qs = `?barge=${$("barge").value}&search=${$("search").value}`;
+  const qs = `?barge=${$("barge").value}&search=${$("search").value}&pregenerate=${$("pregenerate").checked ? "1" : "0"}`;
   const ck = new URLSearchParams(location.search).get("ck");     // the claude_code access key, if the page has one
   const wsUrl = new URL("ws" + qs + (ck ? "&ck=" + encodeURIComponent(ck) : ""), location.href); wsUrl.protocol = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(wsUrl); ws.binaryType = "arraybuffer";

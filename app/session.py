@@ -145,6 +145,7 @@ class MicroCfg:
                                      # is dropped: training kept only notes done before the user stopped)
     think_model: str = "speakrail-base"   # the base model without the adapter (vLLM --served-model-name)
     phrase_cache: bool = True        # a reply's first clause from phrase_cache.py's pre-rendered clips (Breeze, same voice)
+    pregenerate: bool = False        # hold normal reply audio until every TTS segment is ready, to avoid playback underruns
     react_ms: float = 300            # interrupt: user words starting before our audio start + this are the tail of their turn
     interrupt_hold: bool = True      # interrupt: overlap waits until the first sentence has played ...
     hold_max_s: float = 4.0          # ... or this much of it
@@ -165,6 +166,7 @@ class Reply:
         self.held = held                    # speculative: text deltas and audio buffered until promoted
         self.held_deltas: list[str] = []
         self.held_pcm: list[bytes] = []
+        self.pregen_released = False
         self.ctx_snapshot = None            # context before the speak call (early-start undo)
         self.start_ms = 0.0                 # audio ms when the reply became live
         self.text = ""
@@ -960,8 +962,10 @@ class MicroSession(Session):
             R.held = False
             if R.gen_done: self._hist_reply(R)
             if R.held_deltas: self.send({"type": "reply_delta", "turn": R.turn.id, "text": "".join(R.held_deltas)})
-            for pcm in R.held_pcm: self._send_pcm(R.utt, pcm)
-            R.held_deltas, R.held_pcm = [], []
+            if not self.m.pregenerate:
+                for pcm in R.held_pcm: self._send_pcm(R.utt, pcm)
+                R.held_pcm = []
+            R.held_deltas = []
             if R.gen_done: self._maybe_finished(R)
         self._line(f"    ASSISTANT {R.kind} starts (utt {R.utt})")
 
@@ -1307,7 +1311,7 @@ class MicroSession(Session):
         if R is None or R.cut or self.closed:
             return
         if R.turn.t_first_pcm is None: R.turn.t_first_pcm = time.monotonic()
-        if R.held:
+        if R.held or (self.m.pregenerate and R is not self.IJ):
             R.held_pcm.append(pcm); return
         self._send_pcm(seg.utt, pcm)
 
@@ -1337,6 +1341,10 @@ class MicroSession(Session):
         """generation and TTS done: tell the UI, and schedule the end of playback (the reply_end input)"""
         if R.held or R.cut or not R.gen_done or any(not s.done for s in R.segs):
             return
+        if self.m.pregenerate and R is not self.IJ and not R.pregen_released:
+            for pcm in R.held_pcm: self._send_pcm(R.utt, pcm)
+            R.held_pcm = []
+            R.pregen_released = True
         if not getattr(R, "ui_ended", False):
             R.ui_ended = True
             self.speaking = False

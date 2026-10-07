@@ -162,6 +162,11 @@ Applying a changed value restarts and warms up TTS, then saves the choice for
 future restarts. The default is 16; this is a quality/speed tradeoff, not a
 guaranteed fix for every audio device or browser.
 
+For full replies that outlast the GPU's realtime synthesis rate, enable
+**Settings → pre-generate reply before speaking**. Speakrail waits for all reply
+audio to finish synthesizing before it begins playback, which avoids underruns
+at the cost of a longer pause before the voice starts.
+
 ### AMD checks and troubleshooting
 
 ```bash
