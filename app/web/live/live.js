@@ -188,25 +188,13 @@ function drawBlob(t) {
   lvl.bot += (lvl.botTarget - lvl.bot) * (lvl.botTarget > lvl.bot ? 0.4 : 0.08);
   const user = Math.min(1, lvl.mic * 1.6 + lvl.head * 0.4);       // the mic level, lifted by the turn head's P(speaking)
   const bot = Math.min(1, lvl.bot * 1.8);
-  const base = Math.min(w, h) * 0.28;
+  const base = Math.min(w, h) * 0.19;
   const breathe = 1 + 0.008 * Math.sin(t * 0.0007);
   const R = base * breathe * (1 + user * 0.018 + bot * 0.025);
-  const amp = 0.006 + user * 0.018 + bot * 0.014;                 // keep the sphere round; speech adds only a soft ripple
   const s = t * 0.001;
-  const N = 180, pts = [];
-  for (let i = 0; i < N; i++) {
-    const a = (i / N) * Math.PI * 2;
-    const n = 0.5 * Math.sin(3 * a + s * 1.1) + 0.3 * Math.sin(5 * a - s * 0.8 + 1.0) + 0.2 * Math.sin(7 * a + s * 1.7 + 2.0)
-            + user * 0.35 * Math.sin(11 * a - s * 6.0);           // a fine ripple only while the user talks
-    const r = R * (1 + amp * n);
-    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
-  }
+  const N = 180;
   const path = new Path2D();
-  for (let i = 0; i < N; i++) {
-    const p0 = pts[i], p1 = pts[(i + 1) % N], mx = (p0[0] + p1[0]) / 2, my = (p0[1] + p1[1]) / 2;
-    if (i === 0) path.moveTo(mx, my); else path.quadraticCurveTo(p0[0], p0[1], mx, my);
-  }
-  const p0 = pts[0], p1 = pts[1]; path.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
+  path.arc(cx, cy, R, 0, Math.PI * 2);
   path.closePath();
 
   // Quiet blue aura; it swells with playback rather than washing out the dark page.
@@ -226,21 +214,18 @@ function drawBlob(t) {
   ctx.fillStyle = fill; ctx.fill(path);
   ctx.shadowBlur = 0;
 
-  // The soft white-blue cloud band and its brighter upper-right curl echo the reference.
+  // A diffuse, uneven cloud sweep across the lower middle, rather than a hard stripe.
   ctx.save(); ctx.clip(path);
   const drift = Math.sin(t * 0.00012) * R * 0.035;
-  ctx.translate(cx + drift, cy + drift * 0.5);
-  ctx.rotate(-0.39);
-  ctx.scale(1, 0.39);
-  const cloud = ctx.createLinearGradient(-R * 1.25, 0, R * 1.25, 0);
-  cloud.addColorStop(0, "rgba(248,250,255,0)");
-  cloud.addColorStop(0.24, "rgba(248,250,255,0.06)");
-  cloud.addColorStop(0.43, `rgba(${orbIce},${0.28 + bot * 0.12})`);
-  cloud.addColorStop(0.56, `rgba(${orbIce},${0.54 + bot * 0.12})`);
-  cloud.addColorStop(0.68, `rgba(${orbIce},${0.20 + bot * 0.12})`);
-  cloud.addColorStop(0.82, "rgba(248,250,255,0.09)");
-  cloud.addColorStop(1, "rgba(248,250,255,0)");
-  ctx.fillStyle = cloud; ctx.fillRect(-R * 1.3, -R * 1.6, R * 2.6, R * 3.2);
+  ctx.translate(cx + drift, cy + R * 0.12 + drift * 0.5);
+  ctx.rotate(-0.36);
+  ctx.scale(1, 0.32);
+  const cloud = ctx.createRadialGradient(0, 0, R * 0.12, 0, 0, R * 1.65);
+  cloud.addColorStop(0, `rgba(${orbIce},${0.42 + bot * 0.08})`);
+  cloud.addColorStop(0.34, `rgba(${orbIce},${0.32 + bot * 0.08})`);
+  cloud.addColorStop(0.68, `rgba(${orbIce},0.12)`);
+  cloud.addColorStop(1, `rgba(${orbIce},0)`);
+  ctx.fillStyle = cloud; ctx.fillRect(-R * 1.8, -R * 3, R * 3.6, R * 6);
   ctx.restore();
 
   ctx.save(); ctx.clip(path);
@@ -253,7 +238,7 @@ function drawBlob(t) {
 
   // Diffuse cloudlets soften the band edge; their slow drift keeps the idle orb alive.
   for (const [x, y, size, alpha, phase] of [
-    [-0.48, 0.28, 0.64, 0.22, 0.3], [0.18, 0.06, 0.72, 0.16, 1.7], [0.63, -0.31, 0.48, 0.20, 2.8],
+    [-0.48, 0.28, 0.48, 0.19, 0.3], [0.12, 0.10, 0.56, 0.13, 1.7], [0.60, -0.30, 0.42, 0.22, 2.8],
   ]) {
     const px = cx + R * (x + Math.sin(t * 0.00016 + phase) * 0.025);
     const py = cy + R * (y + Math.cos(t * 0.00013 + phase) * 0.018);
