@@ -188,10 +188,10 @@ function drawBlob(t) {
   lvl.bot += (lvl.botTarget - lvl.bot) * (lvl.botTarget > lvl.bot ? 0.4 : 0.08);
   const user = Math.min(1, lvl.mic * 1.6 + lvl.head * 0.4);       // the mic level, lifted by the turn head's P(speaking)
   const bot = Math.min(1, lvl.bot * 1.8);
-  const base = Math.min(w, h) * 0.17;
-  const breathe = 1 + 0.02 * Math.sin(t * 0.0007);
-  const R = base * breathe * (1 + user * 0.28 + bot * 0.14);
-  const amp = 0.035 + user * 0.22 + bot * 0.08;                    // how far the surface wanders from a circle
+  const base = Math.min(w, h) * 0.28;
+  const breathe = 1 + 0.008 * Math.sin(t * 0.0007);
+  const R = base * breathe * (1 + user * 0.018 + bot * 0.025);
+  const amp = 0.006 + user * 0.018 + bot * 0.014;                 // keep the sphere round; speech adds only a soft ripple
   const s = t * 0.001;
   const N = 180, pts = [];
   for (let i = 0; i < N; i++) {
@@ -209,40 +209,72 @@ function drawBlob(t) {
   const p0 = pts[0], p1 = pts[1]; path.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
   path.closePath();
 
-  // Blue ambient halo brightens toward cyan with the assistant's playback level.
-  const glow = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 2.2);
-  const halo = bot > 0.02 ? 0.12 + bot * 0.20 : 0.08 + user * 0.12;
-  glow.addColorStop(0, `rgba(${bot > 0.02 ? orbCyan : orbBlue},${halo})`);
-  glow.addColorStop(0.48, `rgba(${orbBlue},${halo * 0.42})`);
+  // Quiet blue aura; it swells with playback rather than washing out the dark page.
+  const glow = ctx.createRadialGradient(cx, cy, R * 0.82, cx, cy, R * 1.55);
+  const halo = 0.025 + bot * 0.085 + user * 0.025;
+  glow.addColorStop(0, `rgba(${orbBlue},${halo})`);
   glow.addColorStop(1, `rgba(${orbBlue},0)`);
   ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
 
-  // Layered cyan-to-indigo body with a cool specular highlight.
-  const fill = ctx.createRadialGradient(cx - R * 0.15, cy - R * 0.2, R * 0.1, cx, cy, R * 1.15);
-  fill.addColorStop(0, `rgba(${orbIce},${0.96 + bot * 0.04})`);
-  fill.addColorStop(0.2, `rgba(${orbCyan},${0.96 + bot * 0.04})`);
-  fill.addColorStop(0.56, `rgba(${orbBlue},0.96)`);
-  fill.addColorStop(0.84, `rgba(${orbIndigo},0.94)`);
-  fill.addColorStop(1, `rgba(${orbDeep},0.12)`);
-  ctx.shadowColor = `rgba(${orbBlue},0.52)`; ctx.shadowBlur = 42 + user * 24 + bot * 46;
+  // Smooth periwinkle sphere, with the brighter blue above and a pale lavender base.
+  const fill = ctx.createLinearGradient(cx - R * 0.12, cy - R, cx + R * 0.12, cy + R);
+  fill.addColorStop(0, "rgb(75,101,215)");
+  fill.addColorStop(0.36, `rgb(${orbBlue})`);
+  fill.addColorStop(0.7, `rgb(${orbIndigo})`);
+  fill.addColorStop(1, `rgb(${orbDeep})`);
+  ctx.shadowColor = `rgba(${orbBlue},0.16)`; ctx.shadowBlur = 20 + bot * 22;
   ctx.fillStyle = fill; ctx.fill(path);
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = `rgba(${orbIce},${0.32 + user * 0.16 + bot * 0.18})`; ctx.lineWidth = 1; ctx.stroke(path);
+
+  // The soft white-blue cloud band and its brighter upper-right curl echo the reference.
+  ctx.save(); ctx.clip(path);
+  const drift = Math.sin(t * 0.00012) * R * 0.035;
+  ctx.translate(cx + drift, cy + drift * 0.5);
+  ctx.rotate(-0.39);
+  ctx.scale(1, 0.39);
+  const cloud = ctx.createLinearGradient(-R * 1.25, 0, R * 1.25, 0);
+  cloud.addColorStop(0, "rgba(248,250,255,0)");
+  cloud.addColorStop(0.24, "rgba(248,250,255,0.06)");
+  cloud.addColorStop(0.43, `rgba(${orbIce},${0.28 + bot * 0.12})`);
+  cloud.addColorStop(0.56, `rgba(${orbIce},${0.54 + bot * 0.12})`);
+  cloud.addColorStop(0.68, `rgba(${orbIce},${0.20 + bot * 0.12})`);
+  cloud.addColorStop(0.82, "rgba(248,250,255,0.09)");
+  cloud.addColorStop(1, "rgba(248,250,255,0)");
+  ctx.fillStyle = cloud; ctx.fillRect(-R * 1.3, -R * 1.6, R * 2.6, R * 3.2);
+  ctx.restore();
 
   ctx.save(); ctx.clip(path);
-  const shine = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.38, 0, cx - R * 0.3, cy - R * 0.38, R * 0.85);
-  shine.addColorStop(0, `rgba(${orbIce},${0.28 + bot * 0.12})`);
-  shine.addColorStop(1, `rgba(${orbCyan},0)`);
-  ctx.fillStyle = shine; ctx.fill(path); ctx.restore();
+  const flareX = cx + R * 0.58, flareY = cy - R * 0.34;
+  const flare = ctx.createRadialGradient(flareX, flareY, 0, flareX, flareY, R * 0.82);
+  flare.addColorStop(0, `rgba(${orbIce},${0.54 + bot * 0.12})`);
+  flare.addColorStop(0.24, `rgba(${orbIce},${0.28 + bot * 0.10})`);
+  flare.addColorStop(1, `rgba(${orbIce},0)`);
+  ctx.fillStyle = flare; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+
+  // Diffuse cloudlets soften the band edge; their slow drift keeps the idle orb alive.
+  for (const [x, y, size, alpha, phase] of [
+    [-0.48, 0.28, 0.64, 0.22, 0.3], [0.18, 0.06, 0.72, 0.16, 1.7], [0.63, -0.31, 0.48, 0.20, 2.8],
+  ]) {
+    const px = cx + R * (x + Math.sin(t * 0.00016 + phase) * 0.025);
+    const py = cy + R * (y + Math.cos(t * 0.00013 + phase) * 0.018);
+    const mist = ctx.createRadialGradient(px, py, 0, px, py, R * size);
+    mist.addColorStop(0, `rgba(${orbIce},${alpha + bot * 0.06})`);
+    mist.addColorStop(0.5, `rgba(${orbIce},${alpha * 0.38})`);
+    mist.addColorStop(1, `rgba(${orbIce},0)`);
+    ctx.fillStyle = mist; ctx.fillRect(px - R * size, py - R * size, R * size * 2, R * size * 2);
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = `rgba(${orbIce},${0.08 + bot * 0.06})`; ctx.lineWidth = 1; ctx.stroke(path);
 
   // the assistant's voice: a second, thinner membrane pulsing outside the body
   if (bot > 0.02) {
     ctx.beginPath();
     for (let i = 0; i <= N; i++) {
-      const a = (i / N) * Math.PI * 2, r = R * (1.12 + bot * 0.22 + 0.04 * Math.sin(9 * a + s * 5));
+      const a = (i / N) * Math.PI * 2, r = R * (1.015 + bot * 0.045 + 0.008 * Math.sin(9 * a + s * 2));
       i ? ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a)) : ctx.moveTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
     }
-    ctx.strokeStyle = `rgba(${orbCyan},${0.28 + bot * 0.38})`; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = `rgba(${orbCyan},${0.12 + bot * 0.28})`; ctx.lineWidth = 1.5; ctx.stroke();
   }
   // output level from the playback analyser (drives `bot`)
   if (analyser && botSpeaking) {
