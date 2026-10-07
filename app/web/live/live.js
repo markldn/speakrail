@@ -215,10 +215,30 @@ function drawBlob(t) {
   ctx.fillStyle = fill; ctx.fill(path);
   ctx.shadowBlur = 0;
 
+  // Broad color fields glide under the cloud layer, so the sphere's shading moves too.
+  const flow = t * 0.00024;
+  ctx.save(); ctx.clip(path);
+  const shadeX = cx + R * (Math.cos(flow) * 0.34);
+  const shadeY = cy + R * (Math.sin(flow * 0.78 + 1.1) * 0.34);
+  const shade = ctx.createRadialGradient(shadeX, shadeY, 0, shadeX, shadeY, R * 1.08);
+  shade.addColorStop(0, `rgba(45,68,190,${0.22 + bot * 0.04})`);
+  shade.addColorStop(0.42, `rgba(${orbBlue},0.13)`);
+  shade.addColorStop(1, `rgba(${orbBlue},0)`);
+  ctx.fillStyle = shade; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+
+  const lightX = cx + R * (Math.sin(flow + 2.2) * 0.38);
+  const lightY = cy + R * (Math.cos(flow * 0.72 + 0.4) * 0.28);
+  const innerLight = ctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, R * 0.9);
+  innerLight.addColorStop(0, `rgba(${orbIce},${0.21 + pulse * 0.035 + bot * 0.04})`);
+  innerLight.addColorStop(0.46, `rgba(${orbIndigo},0.12)`);
+  innerLight.addColorStop(1, `rgba(${orbIndigo},0)`);
+  ctx.fillStyle = innerLight; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  ctx.restore();
+
   // A diffuse, uneven cloud sweep across the lower middle, rather than a hard stripe.
   ctx.save(); ctx.clip(path);
-  const driftX = Math.sin(t * 0.00034) * R * 0.075;
-  const driftY = Math.cos(t * 0.00025) * R * 0.045;
+  const driftX = Math.sin(flow * 1.4) * R * 0.075;
+  const driftY = Math.cos(flow) * R * 0.045;
   ctx.translate(cx + driftX, cy + R * 0.12 + driftY);
   ctx.rotate(-0.36 + Math.sin(t * 0.00019) * 0.022);
   ctx.scale(1, 0.32);
