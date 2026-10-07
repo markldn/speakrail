@@ -10,6 +10,12 @@ set -euo pipefail
 BREEZE_MODEL=${BREEZE_MODEL:-${MODELS_DIR:-/models}/breeze-tts-2}
 [ -e "$BREEZE_MODEL/config.json" ] || { echo "tts: no Breeze model at $BREEZE_MODEL" >&2; exit 1; }
 
+# A Settings change is persisted across TTS restarts in the shared app-data volume.
+if [ -r /data/breeze_depth_levels ]; then
+  BREEZE_DEPTH_LEVELS=$(tr -d '[:space:]' < /data/breeze_depth_levels)
+  export BREEZE_DEPTH_LEVELS
+fi
+
 FAST_ARGS=()
 IFS=',' read -r -a FAST_STAGES <<< "${BREEZE_FAST_FLAGS:-}"
 for stage in "${FAST_STAGES[@]}"; do
@@ -25,4 +31,4 @@ for stage in "${FAST_STAGES[@]}"; do
 done
 
 cd /opt/breeze
-exec python -m breeze_infer.api "$BREEZE_MODEL" --host "${TTS_HOST:-0.0.0.0}" --port "${TTS_PORT:-7860}" "${FAST_ARGS[@]}"
+exec python -m voice_depth_server "$BREEZE_MODEL" --host "${TTS_HOST:-0.0.0.0}" --port "${TTS_PORT:-7860}" "${FAST_ARGS[@]}"

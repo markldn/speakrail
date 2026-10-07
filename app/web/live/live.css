@@ -49,6 +49,12 @@ body{background:var(--color-bg);color:var(--color-fg);font-family:var(--font-san
 .panel .device-hint{font-size:11px;color:var(--color-fg-faint);padding:2px 4px 5px}
 .panel .device-actions{display:flex;justify-content:flex-end;gap:6px;padding:0 4px 6px}
 .panel .device-actions button:disabled{opacity:.45;cursor:default}
+.voice-fidelity{padding:8px 4px 4px;border-top:1px solid var(--color-border-subtle);margin-top:5px}
+.fidelity-title,.fidelity-scale{display:flex;align-items:center;justify-content:space-between;font-size:12px}
+.fidelity-title output{color:var(--color-fg);font-variant-numeric:tabular-nums}
+.voice-fidelity input[type=range]{display:block;width:100%;margin:9px 0 2px;accent-color:var(--brand-pink)}
+.fidelity-scale{color:var(--color-fg-faint);font-size:10px}
+.voice-fidelity button{display:block;margin:8px 0 0 auto}
 
 /* ---- stage */
 main{flex:1;position:relative;min-height:0}

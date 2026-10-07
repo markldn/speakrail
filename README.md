@@ -156,9 +156,11 @@ docker compose -f compose.amd.yaml down
 The tested 16-level Breeze setting preserves the full codec depth but was
 measured below real time on this host. A 12-level test improved throughput to
 about 1.07–1.11 seconds of generated audio per second of wall time, with some
-loss of voice fidelity. The Compose default remains 16; use
-`BREEZE_DEPTH_LEVELS=12` in `.env` to compare the faster setting. This is a
-quality/speed tradeoff, not a guaranteed fix for every audio device or browser.
+loss of voice fidelity. Use **Settings → Voice fidelity** to select 10–16 RVQ
+levels. Lower levels favor speed; higher levels preserve more codec detail.
+Applying a changed value restarts and warms up TTS, then saves the choice for
+future restarts. The default is 16; this is a quality/speed tradeoff, not a
+guaranteed fix for every audio device or browser.
 
 ### AMD checks and troubleshooting
 

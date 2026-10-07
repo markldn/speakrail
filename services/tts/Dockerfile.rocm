@@ -26,6 +26,7 @@ COPY patches/0001-eager-depth-cudagraph.patch /tmp/eager-depth-cudagraph.patch
 RUN git apply /tmp/eager-depth-cudagraph.patch
 COPY patches/0002-depth-codebook-limit.patch /tmp/depth-codebook-limit.patch
 RUN git apply /tmp/depth-codebook-limit.patch
+COPY voice_depth_server.py /opt/breeze/voice_depth_server.py
 
 COPY start.sh /opt/start.sh
 RUN chmod +x /opt/start.sh

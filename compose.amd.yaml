@@ -45,7 +45,9 @@ services:
       dockerfile: Dockerfile.rocm
       args:
         BASE_IMAGE: ${SPEAKRAIL_ROCM_BASE:-capicua25x/vllm-rocm-rdna4:0.26.1-rdna4-rc7}
-    volumes: *models-ro
+    volumes:
+      - ${SPEAKRAIL_MODELS_DIR:-./models}:/models:ro
+      - app-data:/data
     environment:
       HIP_VISIBLE_DEVICES: "0"
       # BF16 tested faster than int8 for both depth and decode-shaped backbone

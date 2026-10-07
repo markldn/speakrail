@@ -5,6 +5,7 @@ const $ = (id) => document.getElementById(id);
 const CAPTURE_HZ = 16000;
 const SETTINGS = ["barge", "search", "showlog"];
 const AUDIO_SETTINGS = ["microphone", "speaker"];
+let voiceDepthCurrent = null;
 
 let ws, micCtx, playCtx, worklet, stream, analyser, anaBuf, outGain;
 let sources = [], playCursor = 0, uttStart = 0, uttId = 0;
@@ -22,7 +23,11 @@ for (const id of SETTINGS) {
   el.onchange = () => { localStorage.setItem("speakrail." + id, el.type === "checkbox" ? (el.checked ? "1" : "0") : el.value); if (id === "showlog") $("log").hidden = !el.checked; };
 }
 $("log").hidden = !$("showlog").checked;
-function lockSettings(lock) { for (const id of SETTINGS) if (id !== "showlog") $(id).disabled = lock; }
+function lockSettings(lock) {
+  for (const id of SETTINGS) if (id !== "showlog") $(id).disabled = lock;
+  $("voiceDepth").disabled = lock;
+  $("applyVoiceDepth").disabled = lock || Number($("voiceDepth").value) === voiceDepthCurrent;
+}
 for (const id of AUDIO_SETTINGS) {
   const saved = localStorage.getItem("speakrail." + id);
   if (saved != null) $(id).value = saved;
@@ -86,6 +91,63 @@ $("chooseSpeaker").onclick = async () => {
 };
 refreshAudioDevices();
 navigator.mediaDevices?.addEventListener?.("devicechange", refreshAudioDevices);
+
+// AMD Breeze codebook depth is process-wide: applying a changed value safely reloads the TTS worker.
+async function refreshVoiceDepth() {
+  try {
+    const r = await fetch("/api/voice-depth", { cache: "no-store" });
+    if (!r.ok) return;
+    const data = await r.json();
+    voiceDepthCurrent = Number(data.levels);
+    if (!Number.isInteger(voiceDepthCurrent)) return;
+    $("voiceFidelity").hidden = false;
+    $("voiceDepth").value = String(voiceDepthCurrent);
+    $("voiceDepthValue").value = String(voiceDepthCurrent);
+    $("applyVoiceDepth").disabled = true;
+    $("voiceDepthHint").textContent = `Active: ${voiceDepthCurrent} levels. Higher levels preserve more voice detail; changing this restarts TTS.`;
+  } catch (_) { /* Non-AMD TTS servers do not expose this setting. */ }
+}
+$("voiceDepth").oninput = () => {
+  const value = Number($("voiceDepth").value);
+  $("voiceDepthValue").value = String(value);
+  $("applyVoiceDepth").disabled = running || value === voiceDepthCurrent;
+};
+$("applyVoiceDepth").onclick = async () => {
+  const button = $("applyVoiceDepth"), slider = $("voiceDepth"), hint = $("voiceDepthHint");
+  const levels = Number(slider.value);
+  button.disabled = true; slider.disabled = true; button.textContent = "Restarting TTS…";
+  hint.textContent = `Switching to ${levels} levels. Speech will resume when TTS finishes warming up.`;
+  try {
+    const r = await fetch("/api/voice-depth", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ levels }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    const started = Date.now();
+    const poll = async () => {
+      try {
+        const status = await fetch("/api/voice-depth", { cache: "no-store" });
+        const current = status.ok ? await status.json() : null;
+        if (current && !current.restarting && Number(current.levels) === levels) {
+          voiceDepthCurrent = levels; slider.disabled = false; button.textContent = "Apply and restart TTS";
+          hint.textContent = `Active: ${levels} levels. Higher levels preserve more voice detail; changing this restarts TTS.`;
+          return;
+        }
+      } catch (_) { /* TTS is reloading; retry. */ }
+      if (Date.now() - started > 300000) {
+        slider.disabled = false; button.textContent = "Apply and restart TTS";
+        hint.textContent = "TTS is taking a while to restart. Reload this page to check its status.";
+        return;
+      }
+      setTimeout(poll, 2500);
+    };
+    setTimeout(poll, 2500);
+  } catch (e) {
+    slider.disabled = false; button.textContent = "Apply and restart TTS"; button.disabled = false;
+    hint.textContent = "Could not change voice fidelity: " + e.message;
+  }
+};
+refreshVoiceDepth();
 
 // ---------------------------------------------------------------- blob
 const canvas = $("blob"), ctx = canvas.getContext("2d");

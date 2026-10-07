@@ -27,6 +27,13 @@
         <select id="microphone"><option value="">System default</option></select></div>
       <div class="row"><label for="speaker">Speaker</label>
         <select id="speaker"><option value="">System default</option></select></div>
+      <div id="voiceFidelity" class="voice-fidelity" hidden>
+        <div class="fidelity-title"><label for="voiceDepth">Voice fidelity</label><output id="voiceDepthValue">16</output></div>
+        <input id="voiceDepth" type="range" min="10" max="16" step="1" value="16" aria-describedby="voiceDepthHint">
+        <div class="fidelity-scale"><span>Faster</span><span>Fuller voice</span></div>
+        <div id="voiceDepthHint" class="device-hint">Higher levels preserve more voice detail. Applying a change restarts TTS.</div>
+        <button id="applyVoiceDepth" class="chip" type="button" disabled>Apply and restart TTS</button>
+      </div>
       <div id="deviceHint" class="device-hint">Allow microphone access to show device names.</div>
       <div class="device-actions">
         <button id="chooseSpeaker" class="chip" type="button">Choose speaker…</button>

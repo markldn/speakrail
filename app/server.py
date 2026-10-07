@@ -13,6 +13,7 @@
 """
 import argparse
 import asyncio
+import aiohttp
 import json
 import os
 import time
@@ -134,6 +135,27 @@ async def ws_handler(request):
     return ws
 
 
+async def voice_depth(request):
+    """Read or apply the AMD TTS codebook depth; applying reloads the shared TTS model."""
+    tts_url = os.environ.get("TTS_URL", "http://127.0.0.1:7860/v1/audio/speech").rsplit("/v1/audio/speech", 1)[0]
+    try:
+        if request.method == "POST":
+            body = await request.json()
+            levels = int(body.get("levels", -1))
+            if not 10 <= levels <= 16:
+                return web.json_response({"error": "levels must be between 10 and 16"}, status=400)
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as client:
+                async with client.post(f"{tts_url}/admin/voice-depth", json={"levels": levels}) as resp:
+                    data = await resp.json()
+                    return web.json_response(data, status=resp.status)
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as client:
+            async with client.get(f"{tts_url}/admin/voice-depth") as resp:
+                data = await resp.json()
+                return web.json_response(data, status=resp.status)
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
+        return web.json_response({"error": f"TTS voice setting unavailable: {e}"}, status=503)
+
+
 async def on_startup(app):
     global HUB
     if not ARGS.stub:
@@ -189,6 +211,8 @@ def main():
     app = web.Application()
     app.on_startup.append(on_startup)
     app.router.add_get("/", page("live/index.html"))
+    app.router.add_get("/api/voice-depth", voice_depth)
+    app.router.add_post("/api/voice-depth", voice_depth)
     app.router.add_get("/ws", ws_handler)
     app.router.add_static("/static", os.path.join(HERE, "web", "live"))
     # the same UI under /live/, for reverse proxies that mount it there
